@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "API Server",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/server/target/debug/ws_handler_local",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopOnEntry": false,
+            "sourceLanguages": ["rust"],
+            "preLaunchTask": "cargo build",
+        },
+    ]
+}
