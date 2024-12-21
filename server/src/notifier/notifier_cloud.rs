@@ -29,7 +29,11 @@ impl NotifierCloud {
 #[async_trait]
 impl INotifier for NotifierCloud {
     async fn notify(&self, connection_id: &str, message: &str) -> Result<(), LogicError> {
-        tracing::info!("notifying!");
+        tracing::info!(
+            "notifying connection {} with message {}",
+            connection_id,
+            message
+        );
         self.client
             .post_to_connection()
             .connection_id(connection_id)

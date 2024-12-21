@@ -16,7 +16,15 @@ Via command line.
 ```bash
 cd server
 cargo run
+```
+
+Or via VSCode (Run -> API Server).
+
+In two terminals, run:
+
+```bash
 wscat -c ws://localhost:3000
+RoomId:room1
 ```
 
 ## Creating cloud infrastructure
@@ -39,7 +47,25 @@ terraform destroy
 
 # Chatting to the cloud
 
+In two terminals, run:
+
 ```bash
 export WSS=<value of api_gateway_url>
 wscat -c $WSS
+RoomId:room1
+```
+
+Send a message in one and see it reflected in the others.
+
+# Running locally, but using the cloud database
+
+In `launch.json`, uncomment the `WEBSOCKET_TABLE_NAME` variable.
+
+Or via VSCode (Run -> API Server).
+
+In two terminals, run:
+
+```bash
+wscat -c ws://localhost:3000
+RoomId:room1
 ```

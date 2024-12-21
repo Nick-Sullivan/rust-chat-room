@@ -11,6 +11,11 @@
             "stopOnEntry": false,
             "sourceLanguages": ["rust"],
             "preLaunchTask": "cargo build",
+            // Uncomment this to connect to the cloud database.
+            // "env": {
+            //     "WEBSOCKET_TABLE_NAME": "RustChatRoomWebsocket"
+            //     "AWS_REGION": "us-west-2",
+            // }
         },
     ]
 }

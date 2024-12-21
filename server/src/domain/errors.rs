@@ -8,6 +8,7 @@ use std::fmt;
 pub enum LogicError {
     BadRequest(String),
     WebsocketError(String),
+    DatabaseError(String),
     InternalError(String),
 }
 
@@ -16,6 +17,9 @@ impl fmt::Display for LogicError {
         match *self {
             LogicError::BadRequest(ref msg) => {
                 write!(f, "[BadRequest] {}", msg)
+            }
+            LogicError::DatabaseError(ref msg) => {
+                write!(f, "[DatabaseError] {}", msg)
             }
             LogicError::WebsocketError(ref msg) => {
                 write!(f, "[WebsocketError] {}", msg)

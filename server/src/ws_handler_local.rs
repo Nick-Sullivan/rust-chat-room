@@ -1,24 +1,26 @@
+mod database;
 mod domain;
 mod notifier;
 mod service;
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::{Message, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::Response;
 use axum::{routing::any, Router};
-use domain::errors::LogicError;
-use domain::tracing_utils;
+use database::db_cloud::DatabaseCloud;
+use database::{db_local::DatabaseLocal, db_trait::IDatabase};
+use domain::{errors::LogicError, tracing_utils};
 use futures_util::stream::StreamExt;
-use notifier::notifier_local::NotifierLocal;
-use notifier::notifier_trait::INotifier;
-use std::error::Error;
-use std::sync::Arc;
+use notifier::{notifier_local::NotifierLocal, notifier_trait::INotifier};
+use std::env;
+use std::{error::Error, sync::Arc};
+use tokio::time;
 use tower_http::trace::TraceLayer;
-
-const REQUEST_ID: &str = "123";
+use uuid::Uuid;
 
 struct AppState {
-    notifier: Arc<dyn INotifier>,
+    database: Arc<dyn IDatabase>,
+    notifier: Arc<NotifierLocal>,
 }
 
 #[tokio::main]
@@ -37,8 +39,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 async fn make_state() -> Arc<AppState> {
+    let region_name = env::var("WEBSOCKET_TABLE_NAME");
+    let database: Arc<dyn IDatabase> = match region_name {
+        Ok(_) => Arc::new(DatabaseCloud::new().await),
+        Err(_) => Arc::new(DatabaseLocal::new().await),
+    };
     Arc::new(AppState {
         notifier: Arc::new(NotifierLocal::new().await),
+        database,
     })
 }
 
@@ -47,11 +55,13 @@ async fn initialise_connection(
     State(state): State<Arc<AppState>>,
     ws: WebSocketUpgrade,
 ) -> Result<Response, LogicError> {
-    tracing::info!("Upgrading to WebSocket");
+    let database = state.database.clone();
     let notifier = state.notifier.clone();
-    service::on_connect::on_connect(REQUEST_ID).await?;
-    let response = ws.on_upgrade(|socket| async {
-        if let Err(e) = handle_socket(socket, notifier).await {
+    let request_id = Uuid::new_v4().to_string();
+    service::on_connect::on_connect(&request_id, &database).await?;
+    let response = ws.on_upgrade(move |socket| async move {
+        notifier.add_connection(&request_id, socket);
+        if let Err(e) = handle_socket(&request_id, notifier, database).await {
             tracing::error!("Error handling socket: {:?}", e);
         }
     });
@@ -59,18 +69,44 @@ async fn initialise_connection(
 }
 
 async fn handle_socket(
-    mut socket: WebSocket,
-    notifier: Arc<dyn INotifier>,
+    connection_id: &str,
+    notifier_local: Arc<NotifierLocal>,
+    database: Arc<dyn IDatabase>,
 ) -> Result<(), LogicError> {
-    while let Some(Ok(msg)) = socket.next().await {
-        if let Message::Text(text) = msg {
-            service::on_message::on_message(REQUEST_ID, &notifier).await?;
-            let response = Message::Text(text);
-            if socket.send(response).await.is_err() {
-                break;
+    let notifier: Arc<dyn INotifier> = notifier_local.clone() as Arc<dyn INotifier>;
+    loop {
+        tokio::select! {
+            msg = wait_for_message(connection_id, &notifier_local) => {
+                if let Some(Ok(msg)) = msg {
+                    if let Message::Text(text) = msg {
+                        let result =
+                            service::on_message::on_message(connection_id, &text, &notifier, &database)
+                                .await;
+                        if result.is_err() {
+                            break;
+                        }
+                    }
+                } else {
+                    break;
+                }
+            },
+            _ = time::sleep(time::Duration::from_millis(200)) => {
+                // This branch unlocks the socket so we can receive messages
             }
         }
     }
-    service::on_disconnect::on_disconnect(REQUEST_ID).await?;
+    service::on_disconnect::on_disconnect(connection_id, &database).await?;
     Ok(())
+}
+
+async fn wait_for_message(
+    connection_id: &str,
+    notifier_local: &Arc<NotifierLocal>,
+) -> Option<Result<Message, LogicError>> {
+    let socket = notifier_local.get_connection(connection_id).unwrap();
+    let mut socket = socket.lock().await;
+    socket
+        .next()
+        .await
+        .map(|result| result.map_err(|e| LogicError::WebsocketError(e.to_string())))
 }

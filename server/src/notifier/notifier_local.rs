@@ -2,29 +2,44 @@
 use crate::domain::errors::LogicError;
 use crate::notifier::notifier_trait::INotifier;
 use axum::async_trait;
+use axum::extract::ws::{Message, WebSocket};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
+use tokio::sync::Mutex;
 
 pub struct NotifierLocal {
-    pub log: RwLock<HashMap<String, Vec<String>>>,
+    pub sockets: RwLock<HashMap<String, Arc<Mutex<WebSocket>>>>,
 }
 
 impl NotifierLocal {
     pub async fn new() -> Self {
-        let log = RwLock::new(HashMap::new());
-        NotifierLocal { log }
+        let sockets = RwLock::new(HashMap::new());
+        NotifierLocal { sockets }
+    }
+
+    pub fn add_connection(&self, connection_id: &str, websocket: WebSocket) {
+        let arc_websocket = Arc::new(Mutex::new(websocket));
+        let mut sockets = self.sockets.write().unwrap();
+        sockets.insert(connection_id.to_string(), arc_websocket);
+    }
+
+    pub fn get_connection(&self, connection_id: &str) -> Option<Arc<Mutex<WebSocket>>> {
+        let sockets = self.sockets.read().unwrap();
+        sockets.get(connection_id).cloned()
     }
 }
 
 #[async_trait]
 impl INotifier for NotifierLocal {
     async fn notify(&self, connection_id: &str, message: &str) -> Result<(), LogicError> {
-        let mut hash_map = self.log.write().unwrap();
-        match hash_map.get_mut(connection_id) {
-            Some(log) => log.push(message.to_string()),
-            None => {
-                hash_map.insert(connection_id.to_string(), vec![message.to_string()]);
-            }
+        let axum_message = Message::Text(message.to_string());
+        let socket = {
+            let sockets = self.sockets.read().unwrap();
+            sockets.get(connection_id).cloned()
+        };
+        if let Some(socket) = socket {
+            let mut socket = socket.lock().await;
+            let _ = socket.send(axum_message).await;
         }
         Ok(())
     }

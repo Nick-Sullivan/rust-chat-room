@@ -1,8 +1,10 @@
+mod database;
 mod domain;
 mod notifier;
 mod service;
 
 use axum::{body::Body, extract::State, http::Request, routing::any, Router};
+use database::{db_cloud::DatabaseCloud, db_trait::IDatabase};
 use domain::{errors::LogicError, tracing_utils};
 use lambda_http::{
     aws_lambda_events::apigw::ApiGatewayWebsocketProxyRequestContext, request::RequestContext,
@@ -13,6 +15,7 @@ use std::{error::Error, sync::Arc};
 use tower_http::trace::TraceLayer;
 
 struct AppState {
+    database: Arc<dyn IDatabase>,
     notifier: Arc<dyn INotifier>,
 }
 
@@ -34,6 +37,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn make_state() -> Arc<AppState> {
     Arc::new(AppState {
+        database: Arc::new(DatabaseCloud::new().await),
         notifier: Arc::new(NotifierCloud::new().await),
     })
 }
@@ -43,8 +47,10 @@ async fn handle_websocket(
     State(state): State<Arc<AppState>>,
     request: Request<Body>,
 ) -> Result<(), LogicError> {
+    let database = state.database.clone();
     let notifier = state.notifier.clone();
-    let context = parse_context(request).await?;
+    let context = parse_context(&request.request_context()).await?;
+    let message = parse_body(request.into_body()).await?;
     let route_key = context
         .route_key
         .ok_or(LogicError::BadRequest("no route key".to_string()))?;
@@ -54,21 +60,22 @@ async fn handle_websocket(
     let connection_id = context
         .connection_id
         .ok_or(LogicError::BadRequest("no connection id".to_string()))?;
+
     tracing::info!(
         route_key = %route_key,
         request_id = %request_id,
         connection_id = %connection_id,
-        message = "handle_websocket!"
+        message = %message,
     );
     match route_key.as_str() {
         "$connect" => {
-            service::on_connect::on_connect(&connection_id).await?;
+            service::on_connect::on_connect(&connection_id, &database).await?;
         }
         "$disconnect" => {
-            service::on_disconnect::on_disconnect(&connection_id).await?;
+            service::on_disconnect::on_disconnect(&connection_id, &database).await?;
         }
         "$default" => {
-            service::on_message::on_message(&connection_id, &notifier).await?;
+            service::on_message::on_message(&connection_id, &message, &notifier, &database).await?;
         }
         _ => return Err(LogicError::BadRequest("unrecognised route key".to_string())),
     }
@@ -76,16 +83,24 @@ async fn handle_websocket(
 }
 
 async fn parse_context(
-    request: Request<Body>,
+    ctx: &RequestContext,
 ) -> Result<ApiGatewayWebsocketProxyRequestContext, LogicError> {
-    let ctx = request.request_context();
-    let ctx_str = serde_json::to_string(&ctx)
-        .map_err(|_| LogicError::BadRequest("cant parse context".to_string()))?;
-    println!("ctx_str: {ctx_str}");
+    // let ctx_str = serde_json::to_string(&ctx)
+    //     .map_err(|_| LogicError::BadRequest("cant parse context".to_string()))?;
     match ctx {
         RequestContext::WebSocket(ctx) => {
-            return Ok(ctx);
+            return Ok(ctx.clone());
         }
         _ => return Err(LogicError::BadRequest("bad context".to_string())),
     }
+}
+
+async fn parse_body(body: Body) -> Result<String, LogicError> {
+    let limit = 2048usize;
+    let bytes = axum::body::to_bytes(body, limit)
+        .await
+        .map_err(|_| LogicError::BadRequest("cant parse body".to_string()))?;
+    let body_str = String::from_utf8(bytes.to_vec())
+        .map_err(|_| LogicError::BadRequest("cant parse body".to_string()))?;
+    Ok(body_str)
 }

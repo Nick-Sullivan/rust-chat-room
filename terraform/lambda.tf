@@ -18,7 +18,8 @@ resource "aws_lambda_function" "api" {
   ]
   environment {
     variables = {
-      API_GATEWAY_URL = aws_apigatewayv2_stage.websocket.invoke_url,
+      WEBSOCKET_TABLE_NAME = aws_dynamodb_table.websocket_connection.name,
+      API_GATEWAY_URL      = aws_apigatewayv2_stage.websocket.invoke_url,
     }
   }
 }
@@ -33,6 +34,12 @@ resource "aws_iam_role_policy" "api_connections" {
   name   = "ApiConnections"
   role   = aws_iam_role.lambda_api.name
   policy = data.aws_iam_policy_document.api_connections.json
+}
+
+resource "aws_iam_role_policy" "access_dynamodb" {
+  name   = "DynamoDB"
+  role   = aws_iam_role.lambda_api.name
+  policy = data.aws_iam_policy_document.access_dynamodb.json
 }
 
 resource "aws_iam_role_policy_attachment" "execute_api_lambda" {
@@ -62,3 +69,20 @@ data "aws_iam_policy_document" "api_connections" {
   }
 }
 
+data "aws_iam_policy_document" "access_dynamodb" {
+  statement {
+    actions = [
+      "dynamodb:ConditionCheckItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:Query",
+      "dynamodb:UpdateItem",
+    ]
+    effect = "Allow"
+    resources = [
+      aws_dynamodb_table.websocket_connection.arn,
+      "${aws_dynamodb_table.websocket_connection.arn}/index/*"
+    ]
+  }
+}
