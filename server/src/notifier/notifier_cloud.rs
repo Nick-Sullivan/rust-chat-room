@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use super::notifier_trait::INotifier;
-use crate::domain::errors::LogicError;
+use crate::domain::{errors::LogicError, message::Message};
 use aws_config::{meta::region::RegionProviderChain, BehaviorVersion};
 use aws_sdk_apigatewaymanagement::{config::Region, primitives::Blob, Client};
 use axum::async_trait;
@@ -28,16 +28,20 @@ impl NotifierCloud {
 
 #[async_trait]
 impl INotifier for NotifierCloud {
-    async fn notify(&self, connection_id: &str, message: &str) -> Result<(), LogicError> {
+    async fn notify(&self, connection_id: &str, message: &Message) -> Result<(), LogicError> {
         tracing::info!(
             "notifying connection {} with message {}",
             connection_id,
-            message
+            message.text
         );
+
+        let message_json = serde_json::to_string(message)
+            .map_err(|e| LogicError::WebsocketError(e.to_string()))?;
+
         self.client
             .post_to_connection()
             .connection_id(connection_id)
-            .data(Blob::new(message.as_bytes().to_vec()))
+            .data(Blob::new(message_json.as_bytes().to_vec()))
             .send()
             .await
             .map_err(|e| LogicError::WebsocketError(e.to_string()))?;

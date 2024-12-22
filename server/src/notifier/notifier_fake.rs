@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use crate::domain::errors::LogicError;
+use crate::domain::message::Message;
 use crate::notifier::notifier_trait::INotifier;
 use axum::async_trait;
 use std::collections::HashMap;
@@ -24,12 +25,16 @@ impl NotifierFake {
 
 #[async_trait]
 impl INotifier for NotifierFake {
-    async fn notify(&self, connection_id: &str, message: &str) -> Result<(), LogicError> {
-        let mut hash_map = self.log.write().unwrap();
+    async fn notify(&self, connection_id: &str, message: &Message) -> Result<(), LogicError> {
+        let message_json = serde_json::to_string(message)
+            .map_err(|e| LogicError::WebsocketError(e.to_string()))?;
+
+        let mut hash_map: std::sync::RwLockWriteGuard<'_, HashMap<String, Vec<String>>> =
+            self.log.write().unwrap();
         match hash_map.get_mut(connection_id) {
-            Some(log) => log.push(message.to_string()),
+            Some(log) => log.push(message_json),
             None => {
-                hash_map.insert(connection_id.to_string(), vec![message.to_string()]);
+                hash_map.insert(connection_id.to_string(), vec![message_json]);
             }
         }
         Ok(())

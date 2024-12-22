@@ -636,6 +636,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-targets",
 ]
@@ -1879,6 +1880,7 @@ dependencies = [
  "futures-util",
  "hyper 1.5.1",
  "lambda_http",
+ "serde",
  "serde_json",
  "tokio",
  "tokio-tungstenite 0.26.0",

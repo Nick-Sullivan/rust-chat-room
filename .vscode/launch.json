@@ -17,5 +17,13 @@
             //     "AWS_REGION": "us-west-2",
             // }
         },
+        {
+            "command": "./node_modules/.bin/astro dev",
+            "name": "Browser",
+            "request": "launch",
+            "type": "node-terminal",
+            "cwd": "${workspaceFolder}/browser",
+
+        }
     ]
 }

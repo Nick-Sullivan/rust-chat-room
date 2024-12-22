@@ -29,6 +29,7 @@ locals {
   aws_account_id   = data.aws_caller_identity.identity.account_id
   root_dir         = "${path.root}/.."
   lambda_dir       = "${local.root_dir}/server"
+  browser_dir      = "${local.root_dir}/browser"
   tags = {
     Project = "Rust Chat Room"
   }

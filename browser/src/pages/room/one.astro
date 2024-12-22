@@ -1,0 +1,10 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import ChatRoom from "../../components/ChatRoom/ChatRoom";
+import { wsUrl } from "../../../terraform-output.js";
+const roomId = "one";
+---
+
+<Layout>
+  <ChatRoom initialRoomId={roomId} wsUrl={wsUrl} client:load />
+</Layout>

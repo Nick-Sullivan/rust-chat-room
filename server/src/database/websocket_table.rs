@@ -54,10 +54,12 @@ impl WebsocketTable {
     fn from_map(hash_map: &HashMap<String, AttributeValue>) -> Result<WebsocketRecord, LogicError> {
         let id = parse_attribute_value::<String>(hash_map.get("id"))?;
         let room_id = parse_attribute_value::<String>(hash_map.get("room_id"))?;
+        let name = parse_attribute_value::<String>(hash_map.get("name"))?;
         let modified_at = parse_attribute_value::<DateTime<Utc>>(hash_map.get("modified_at"))?;
         let item = WebsocketRecord {
             id,
             room_id,
+            name,
             modified_at,
         };
         Ok(item)
@@ -85,7 +87,8 @@ impl WebsocketTable {
                 "modified_at",
                 AttributeValue::S(record.modified_at.format(DATETIME_FORMAT).to_string()),
             )
-            .item("room_id", AttributeValue::S(record.room_id.to_string()));
+            .item("room_id", AttributeValue::S(record.room_id.to_string()))
+            .item("name", AttributeValue::S(record.name.to_string()));
 
         let put_item = put_item
             .build()

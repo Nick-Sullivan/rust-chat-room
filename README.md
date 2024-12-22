@@ -24,7 +24,7 @@ In two terminals, run:
 
 ```bash
 wscat -c ws://localhost:3000
-RoomId:room1
+UserUpdate:RoomId=room1&Name=name1 # can use distinct names
 ```
 
 ## Creating cloud infrastructure
@@ -52,7 +52,7 @@ In two terminals, run:
 ```bash
 export WSS=<value of api_gateway_url>
 wscat -c $WSS
-RoomId:room1
+UserUpdate:RoomId=room1&Name=name1 # can use distinct names
 ```
 
 Send a message in one and see it reflected in the others.
@@ -68,4 +68,5 @@ In two terminals, run:
 ```bash
 wscat -c ws://localhost:3000
 RoomId:room1
+UserUpdate:RoomId=room1&Name=name1 # can use distinct names
 ```

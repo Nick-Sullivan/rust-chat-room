@@ -1,0 +1,21 @@
+.chat-messages {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  background-color: transparent;
+}
+.message-container {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+.message-author {
+  font-weight: bold;
+  margin-right: 5px;
+  width: 100px;
+  display: inline-block;
+}
+.message-text {
+  flex: 1;
+}

@@ -1,9 +1,10 @@
 use crate::database::{db_trait::IDatabase, websocket_table::WebsocketTable};
 use crate::domain::errors::LogicError;
+use crate::domain::message::Message;
 use crate::notifier::notifier_trait::INotifier;
 use std::sync::Arc;
 
-const ROOM_PREFIX: &str = "RoomId:";
+const USER_UPDATE_PREFIX: &str = "UserUpdate:";
 
 pub async fn on_message(
     connection_id: &str,
@@ -12,23 +13,53 @@ pub async fn on_message(
     database: &Arc<dyn IDatabase>,
 ) -> Result<(), LogicError> {
     tracing::info!("on_message!");
-    if text.starts_with(ROOM_PREFIX) {
-        let room_id = text.trim_start_matches(ROOM_PREFIX);
+    if text.starts_with(USER_UPDATE_PREFIX) {
+        let raw = text.trim_start_matches(USER_UPDATE_PREFIX);
+        let (room_id, name) = parse_user_update_request(raw)?;
         let mut record = WebsocketTable::from_db(&connection_id, database).await?;
-        record.room_id = room_id.to_string();
+        record.room_id = room_id;
+        record.name = name;
         let transaction = WebsocketTable::save(&record)?;
         database.write_single(transaction).await?;
         return Ok(());
     }
     let record = WebsocketTable::from_db(&connection_id, database).await?;
+    let message = Message {
+        text: text.to_string(),
+        author_name: record.name,
+        sent_at: chrono::Utc::now(),
+    };
     let records = WebsocketTable::get_room_connections(&record.room_id, database).await?;
     for record in records {
-        notifier.notify(&record.id, text).await?;
+        notifier.notify(&record.id, &message).await?;
     }
 
     Ok(())
 }
 
+fn parse_user_update_request(text: &str) -> Result<(String, String), LogicError> {
+    // Expect a string in the form of "RoomId=room&Name=name"
+    // We update both in a single message to avoid race conditions if we were
+    // to update them separately
+    let raw: &str = text.trim_start_matches(USER_UPDATE_PREFIX);
+    let mut room_id = None;
+    let mut name = None;
+    for pair in raw.split('&') {
+        let mut iter = pair.split('=');
+        match iter.next() {
+            Some("RoomId") => room_id = iter.next().map(|s| s.to_string()),
+            Some("Name") => name = iter.next().map(|s| s.to_string()),
+            _ => {}
+        }
+    }
+    if let (Some(room_id), Some(name)) = (room_id, name) {
+        Ok((room_id, name))
+    } else {
+        Err(LogicError::BadRequest(
+            "Invalid user update request".to_string(),
+        ))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -36,13 +67,15 @@ mod tests {
     use crate::domain::websocket_record::WebsocketRecord;
     use crate::notifier::notifier_fake::NotifierFake;
     use crate::notifier::notifier_local::NotifierLocal;
+    use serde_json::from_str;
     use std::sync::Arc;
 
     #[tokio::test]
-    async fn test_room_change_updates_record() -> Result<(), LogicError> {
+    async fn test_user_change_updates_record() -> Result<(), LogicError> {
         let id = "test";
         let room_id = "room";
-        let text = format!("{}{}", ROOM_PREFIX, room_id);
+        let name = "name";
+        let text = format!("{}RoomId={}&Name={}", USER_UPDATE_PREFIX, room_id, name);
         let db: Arc<dyn IDatabase> = Arc::new(DatabaseLocal::new().await);
         WebsocketTable::to_db(&WebsocketRecord::new(id), &db).await?;
         let notifier: Arc<dyn INotifier> = Arc::new(NotifierLocal::new().await);
@@ -50,6 +83,7 @@ mod tests {
         assert!(result.is_ok());
         let record = WebsocketTable::from_db(id, &db).await?;
         assert!(record.room_id == room_id);
+        assert!(record.name == name);
         Ok(())
     }
 
@@ -77,8 +111,10 @@ mod tests {
         assert_eq!(log1.len(), 1);
         assert_eq!(log2.len(), 1);
         assert_eq!(log3.len(), 0);
-        assert_eq!(log1[0], text);
-        assert_eq!(log2[0], text);
+        let message1: Message = from_str(&log1[0])?;
+        let message2: Message = from_str(&log1[0])?;
+        assert_eq!(message1.text, text);
+        assert_eq!(message2.text, text);
         Ok(())
     }
 }
