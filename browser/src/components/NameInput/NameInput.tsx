@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import "./CamouflageInputText.css";
+import "./NameInput.css";
 
-export const CamouflageInputText: React.FC<{
+export const NameInput: React.FC<{
   defaultValue: string;
   onValueCommitted: (value: string) => void;
 }> = ({ defaultValue, onValueCommitted }) => {
@@ -33,6 +33,7 @@ export const CamouflageInputText: React.FC<{
       onFocus={handleFocus}
       onBlur={handleCommit}
       onKeyDown={handleOnKeyDown}
+      maxLength={15}
       spellCheck="false"
     />
   );

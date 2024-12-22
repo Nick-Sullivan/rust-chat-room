@@ -19,6 +19,7 @@ export const MessageInput: React.FC<{
       <input
         type="text"
         placeholder="Type your message..."
+        maxLength={100}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={(e) => {
@@ -27,7 +28,7 @@ export const MessageInput: React.FC<{
           }
         }}
       />
-      <button onClick={handleSendMessage} disabled={!isEnabled || !message}>
+      <button onClick={handleSendMessage} disabled={!isEnabled}>
         Send
       </button>
     </div>

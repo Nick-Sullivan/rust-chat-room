@@ -1,5 +1,5 @@
 import React from "react";
-import { CamouflageInputText } from "../CamouflageInputText/CamouflageInputText";
+import { NameInput } from "../NameInput/NameInput";
 import "./RoomHeader.css";
 
 export const RoomHeader: React.FC<{
@@ -11,10 +11,7 @@ export const RoomHeader: React.FC<{
     <div className="room-header">
       <h1>Room {roomId}</h1>
       Your name is&nbsp;
-      <CamouflageInputText
-        defaultValue={defaultName}
-        onValueCommitted={onNameChange}
-      />
+      <NameInput defaultValue={defaultName} onValueCommitted={onNameChange} />
     </div>
   );
 };
